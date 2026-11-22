@@ -111,6 +111,8 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._tracking_before = None
         self._edits = 0
         self._usage = {}
+        self._baseline = None  # the layout problems the file had before this turn's first edit
+        self._layout_left = 0
         self._last_reply = ""
         # Each turn: {"question", "note", "items": [("text", str) | ("edit", str) | ("error", str)]}
         self._turns = []
@@ -562,6 +564,8 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._show_all = False
         self._pending = ""
         self._edits = 0
+        self._baseline = None
+        self._layout_left = 0
         self._cancel.clear()
         self._phase = "waiting"
         self._started = time.time()
@@ -601,7 +605,8 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
             result, reply = chat.run_turn(api_key, model, self.conversation, self._execute_tool,
                                           self.app.SYSTEM_PROMPT, tools,
                                           on_text=self._on_text, cancelled=self._cancel.is_set,
-                                          on_activity=self._set_phase, usage=self._usage)
+                                          on_activity=self._set_phase, usage=self._usage,
+                                          review=self._review)
         except api.Cancelled:
             error = "Stopped."
         except api.ApiError as failure:
@@ -644,6 +649,11 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         common.check_arguments(definition, arguments)  # before any undo group is opened
         reads = name in getattr(self.app, "READ_ONLY_TOOLS", ())
         if self._undo_doc is None and not reads:
+            if hasattr(self.app, "layout_problems"):
+                try:
+                    self._baseline = set(key for key, _ in self.app.layout_problems(doc))
+                except Exception:
+                    traceback.print_exc()
             common.begin_undo(doc)
             self._undo_doc = doc
             if self.app.SUPPORTS_TRACKING and self.settings.track_changes():
@@ -656,6 +666,48 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._turns[-1]["items"].append(("edit", note))
         self._note(note)
         return result
+
+    def _review(self, final):
+        """Called on the worker thread when Claude finishes: measure the file on the main thread and
+        return the problems this turn made, for Claude to fix. Nothing in the file is changed."""
+        if not self._edits or self._baseline is None or not hasattr(self.app, "layout_problems"):
+            return []
+        done = threading.Event()
+        found = {"problems": []}
+
+        def run():
+            try:
+                problems = [text for key, text in self.app.layout_problems(self._doc())
+                            if key not in self._baseline][:12]
+                found["problems"] = problems
+                self._flush()
+                count = len(problems)
+                plural = "" if count == 1 else "s"
+                if not problems:
+                    self._add_note("Checked the layout: no problems found")
+                elif final:
+                    self._layout_left = count
+                    self._add_note("Layout check: %d problem%s still there. Please check:" % (count, plural),
+                                   error=True)
+                else:
+                    self._add_note("Layout check found %d problem%s; asking Claude to fix %s"
+                                   % (count, plural, "it" if count == 1 else "them"), error=True)
+                for text in problems:
+                    self._add_note(text, error=True)
+            except Exception:
+                traceback.print_exc()
+            finally:
+                done.set()
+
+        self._on_main(run)
+        while not done.wait(0.2):
+            if self._disposed:
+                raise api.Cancelled()
+        return found["problems"]
+
+    def _add_note(self, text, error=False):
+        self._turns[-1]["items"].append(("error" if error else "edit", text))
+        self._note(text, error=error)
 
     def _on_text(self, delta):
         with self._lock:
@@ -719,6 +771,9 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
             if self._usage.get("input_tokens") or self._usage.get("output_tokens"):
                 status += " %s tokens in, %s out." % (format(self._usage.get("input_tokens", 0), ","),
                                                       format(self._usage.get("output_tokens", 0), ","))
+            if self._layout_left:
+                status += " %d layout problem%s left; see the transcript." % (
+                    self._layout_left, "" if self._layout_left == 1 else "s")
             self._set_status(status + undo_hint)
         if self._edits:
             # An Undo can bring the text back to what Claude was last sent, so send it again next time.

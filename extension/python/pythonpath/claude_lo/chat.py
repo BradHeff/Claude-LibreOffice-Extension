@@ -15,6 +15,8 @@ CONTEXT_DOCUMENT = "document"
 MAX_CONTEXT_CHARS = 600000
 # A turn that keeps calling tools is stopped after this many requests.
 MAX_ROUNDS = 25
+# How many times a turn's problems found by the app's own check are sent back to Claude.
+MAX_REVIEWS = 2
 
 DEFAULT_TAGS = {CONTEXT_SELECTION: "writer_selection", CONTEXT_DOCUMENT: "writer_document"}
 
@@ -118,6 +120,15 @@ class Conversation(object):
     def add_tool_results(self, results):
         self.messages.append({"role": "user", "content": results})
 
+    def add_review(self, problems):
+        """Send Claude the problems the panel's own check found after its edits."""
+        lines = "\n".join("- " + p.replace("</layout_check>", "</ layout_check>") for p in problems)
+        self.messages.append({"role": "user", "content": (
+            "<layout_check>\nThe panel checked the file after your edits. This message comes from the "
+            "panel, not the person. It found:\n%s\n</layout_check>\n\nFix these with the tools, then say "
+            "in one short sentence what you changed. If something here is intended, leave it and say why."
+            % lines)})
+
 
 def tools_for(choice, tools, read_only):
     """The tools Claude gets for a message. When the person chose to send no sheet content, or only
@@ -128,7 +139,7 @@ def tools_for(choice, tools, read_only):
 
 
 def run_turn(api_key, model, conversation, execute_tool, system, tools, on_text=None,
-             cancelled=None, stream=api.stream_message, on_activity=None, usage=None):
+             cancelled=None, stream=api.stream_message, on_activity=None, usage=None, review=None):
     """Run the turn whose user message is already in `conversation`.
 
     Calls the API, runs any tools Claude asks for through
@@ -137,6 +148,10 @@ def run_turn(api_key, model, conversation, execute_tool, system, tools, on_text=
     The conversation is left complete on success; on an exception or a refusal
     the caller rolls it back. `on_activity(phase)` reports progress: "waiting",
     "thinking", "writing", "preparing" (an edit) or "editing".
+
+    `review(final)`, when given, is called each time Claude finishes and returns a list of problems
+    the app found in the file. Up to MAX_REVIEWS times they are sent back for Claude to fix; the call
+    with final=True is the last look, and what it returns is not sent.
     """
     def report(phase):
         if on_activity:
@@ -145,6 +160,7 @@ def run_turn(api_key, model, conversation, execute_tool, system, tools, on_text=
     phases = {"thinking": "thinking", "redacted_thinking": "thinking", "text": "writing",
               "tool_use": "preparing"}
     texts = []
+    reviews = 0
     for round_number in range(MAX_ROUNDS):
         if texts and on_text:
             on_text("\n\n")
@@ -168,6 +184,12 @@ def run_turn(api_key, model, conversation, execute_tool, system, tools, on_text=
             blocks = [b for b in blocks if b.get("type") != "tool_use"]
             if blocks:
                 conversation.add_assistant(blocks)
+            if review is not None and blocks and message.stop_reason in ("end_turn", "stop_sequence"):
+                problems = review(reviews >= MAX_REVIEWS)
+                if problems and reviews < MAX_REVIEWS:
+                    conversation.add_review(problems)
+                    reviews += 1
+                    continue
             return message, "\n\n".join(texts)
         conversation.add_assistant(blocks)
         results = []

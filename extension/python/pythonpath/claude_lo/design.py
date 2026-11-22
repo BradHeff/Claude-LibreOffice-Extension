@@ -52,3 +52,40 @@ def describe_shape(label, kind, x, y, width, height, fill=None):
     line = '"%s" (%s) at %s, %s, size %s x %s' % (label, kind, number(x), number(y),
                                                   number(width), number(height))
     return line + (", fill %s" % fill if fill else "")
+
+
+def spill(inner, outer, tolerance):
+    """The sides where box `inner` reaches past box `outer` by more than `tolerance`.
+    Boxes are (left, top, right, bottom)."""
+    sides = []
+    if inner[0] < outer[0] - tolerance:
+        sides.append("left")
+    if inner[2] > outer[2] + tolerance:
+        sides.append("right")
+    if inner[1] < outer[1] - tolerance:
+        sides.append("top")
+    if inner[3] > outer[3] + tolerance:
+        sides.append("bottom")
+    return sides
+
+
+def area(box):
+    return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+
+
+def overlap_area(a, b):
+    return area((max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])))
+
+
+def _luminance(color):
+    def channel(value):
+        value /= 255.0
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+    return (0.2126 * channel((color >> 16) & 255) + 0.7152 * channel((color >> 8) & 255)
+            + 0.0722 * channel(color & 255))
+
+
+def contrast(a, b):
+    """The WCAG contrast ratio of two colours, from 1 (the same) to 21 (black on white)."""
+    light, dark = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)

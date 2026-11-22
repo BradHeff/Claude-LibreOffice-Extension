@@ -4,7 +4,23 @@ A sidebar panel that lets you chat with Claude inside LibreOffice Writer, Calc a
 
 This is an independent project. It is not made, endorsed or supported by Anthropic or by The Document Foundation.
 
-Current version: 0.8.1. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
+Current version: 0.8.2. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
+
+## Screenshots
+
+### Impress
+
+Claude building a six-slide deck from one request. The panel lists each edit as Claude makes it.
+
+![Claude building a deck in Impress, with each edit listed in the sidebar panel](screenshots/Impress-1.png)
+
+The finished "How It Works" slide, with Claude's summary of the deck in the panel.
+
+![A slide with three numbered cards, and Claude's summary of the deck in the panel](screenshots/Impress-2.png)
+
+The closing slide, with a "Get started today" button that fades in.
+
+![The closing slide of the deck, with a call-to-action button](screenshots/Impress-3.png)
 
 ## What you need
 
@@ -62,6 +78,10 @@ Claude sees an outline of each slide: title, body, notes, other text, and the po
 
 Claude cannot see the slides it makes. It works from numbers, so layout quality depends on how well it estimates. It cannot insert images or charts.
 
+To catch the usual mistakes, the panel measures the slides after Claude finishes editing. It looks for text that doesn't fit its shape or runs off the slide, text that overlaps other text or sits behind a shape, and text that is hard to read against its background. Problems that weren't in the file before the turn go back to Claude to fix, up to twice, and the transcript lists each check. Anything still wrong after that is named in the status line for you to look at. The fixes are part of the same undo step as the rest of the turn.
+
+Text wraps inside the rectangles and ellipses Claude draws. Shapes drawn by version 0.8.1 or earlier keep their text on one line; the check flags them, and Claude can redraw them.
+
 Text edits only work in Normal view. In Outline and Slide Sorter view LibreOffice throws away text changes made this way, so the extension refuses them and tells Claude to ask you to switch.
 
 ## Privacy and security
@@ -80,6 +100,7 @@ The default model is Claude Opus 5.5. Settings also offers Sonnet 5.5, Haiku 5.5
 
 - Tested on Linux (Fedora) with LibreOffice 26.2. Windows and macOS have not been tested.
 - The slide show animations were built to match the timing data LibreOffice itself writes, after an early version looped on the next slide. That fix has not been confirmed in a live slide show.
+- LibreOffice can crash when you close a presentation that Claude drew shapes in and then open another document in the same session. The cause is not found yet. Until it is, save your other open documents before closing such a presentation, or restart LibreOffice after closing it.
 - Anything you type while Claude is editing becomes part of Claude's undo step, so wait until it finishes.
 - With tracked changes on, deleted text still shows in the document text that Claude reads on the next turn.
 - Not supported: Calc frozen panes, pivot tables and tracked changes; Writer page layout, headers and images; Impress images.

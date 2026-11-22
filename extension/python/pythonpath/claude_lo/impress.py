@@ -105,6 +105,14 @@ the slide view lists both. Animate sparingly: give a slide at most a few \
 steps, and use one consistent transition. Say plainly what you could not do, \
 such as images.
 
+Text wraps inside rectangles and ellipses, and a shape keeps the size you give \
+it, so make each shape big enough for its text. When you finish, the panel \
+measures the slides and sends you any layout problems it finds (text that \
+doesn't fit its shape or runs off the slide, text hidden behind a shape, text \
+that is hard to read) inside <layout_check> tags. That message comes from the \
+panel, not the person: fix the problems with the tools, then say in one short \
+sentence what you changed.
+
 """ + chat.MARKDOWN_RULES + "\n" + chat.LANGUAGE_RULE.replace("{noun}", "presentation") + "\n"
 
 _SLIDE = {"type": "integer", "description": "The slide number, counting from 1."}
@@ -117,8 +125,12 @@ _COLOR_OR_NONE = {"type": "string", "description": (
     "(when editing: keep what it has).")}
 _PERCENT = {"type": "number", "description": "A percentage of the slide's width (x, width) or height (y, height)."}
 _PERCENT_KEEP = {"type": "number", "description": "A percentage of the slide, or -1 to keep it as it is."}
-_SHAPE_SERVICES = {"rectangle": "RectangleShape", "rounded_rectangle": "RectangleShape",
-                   "ellipse": "EllipseShape", "line": "LineShape", "text_box": "TextShape"}
+# Rectangles and ellipses are custom shapes, as LibreOffice's own toolbar draws them, because their
+# text wraps inside the shape; the older RectangleShape and EllipseShape keep text on one line.
+_SHAPE_SERVICES = {"rectangle": "CustomShape", "rounded_rectangle": "CustomShape",
+                   "ellipse": "CustomShape", "line": "LineShape", "text_box": "TextShape"}
+_GEOMETRY = {"rectangle": "rectangle", "rounded_rectangle": "round-rectangle", "ellipse": "ellipse"}
+_GEOMETRY_WORDS = {"rectangle": "rectangle", "round-rectangle": "rounded rectangle", "ellipse": "ellipse"}
 
 TOOLS = [
     tool("replace_text",
@@ -384,6 +396,14 @@ def _fill_text(shape):
     return None
 
 
+def _geometry_type(shape):
+    """A custom shape's kind, such as "round-rectangle", or "" when it can't be read."""
+    try:
+        return {p.Name: p.Value for p in shape.CustomShapeGeometry}.get("Type", "")
+    except Exception:
+        return ""
+
+
 def _shape_lines(page, placeholders=True):
     """The title, body and drawn shapes of a slide, with position and size in per cent."""
     width, height = page.Width, page.Height
@@ -401,7 +421,9 @@ def _shape_lines(page, placeholders=True):
         else:
             label = shape.Name
             word = _KIND_WORDS.get(kind.split(".")[-1], "shape")
-            if word == "rectangle" and shape.getPropertyValue("CornerRadius"):
+            if kind.endswith("CustomShape"):
+                word = _GEOMETRY_WORDS.get(_geometry_type(shape), "shape")
+            elif word == "rectangle" and shape.getPropertyValue("CornerRadius"):
                 word = "rounded rectangle"
         if label in ("title", "body") and not placeholders:
             continue
@@ -1281,8 +1303,11 @@ def _build(doc, page, spec):
         shape.Name = spec["name"]
         shape.setPosition(spec["position"])
         shape.setSize(spec["size"])
-        if spec["kind"] == "rounded_rectangle":
-            shape.CornerRadius = int(min(spec["size"].Width, spec["size"].Height) * 0.2)
+        if spec["kind"] in _GEOMETRY:
+            geometry = uno.createUnoStruct("com.sun.star.beans.PropertyValue")
+            geometry.Name, geometry.Value = "Type", _GEOMETRY[spec["kind"]]
+            shape.CustomShapeGeometry = uno.Any("[]com.sun.star.beans.PropertyValue", (geometry,))
+            shape.TextAutoGrowHeight = False  # keep the size Claude chose; the text wraps inside it
         if spec["kind"] == "text_box":
             _write(shape, {"FillStyle": FILL_NONE, "LineStyle": LINE_NONE})
         if spec["text"]:
@@ -1742,6 +1767,163 @@ def _animation_lines(page):
                 lines.append('%s%s "%s"%s (%s)' % (preset, " from " + sub if sub else "", name,
                                                    " by paragraph" if by_paragraph else "", when))
     return lines
+
+
+# --- the layout check ----------------------------------------------------------------
+#
+# Claude can't see the slides, so after a turn of edits the panel measures them. A shape's BoundRect
+# covers everything it draws, including text that runs out of it, so comparing it with the shape's own
+# box and with the slide finds text that doesn't fit. Nothing here changes the document.
+
+def _box_of(shape):
+    position, size = shape.getPosition(), shape.getSize()
+    return (position.X, position.Y, position.X + size.Width, position.Y + size.Height)
+
+
+def _bound_of(shape):
+    bound = shape.BoundRect
+    return (bound.X, bound.Y, bound.X + bound.Width, bound.Y + bound.Height)
+
+
+def _fill_colours(obj):
+    """The colours a shape or background is filled with, or None when it has no solid fill."""
+    try:
+        style = obj.getPropertyValue("FillStyle")
+        if style == SOLID:
+            colours = [obj.getPropertyValue("FillColor")]
+        elif style == GRADIENT:
+            gradient = obj.getPropertyValue("FillGradient")
+            colours = [gradient.StartColor, gradient.EndColor]
+        else:
+            return None
+    except Exception:
+        return None
+    try:
+        if obj.getPropertyValue("FillTransparence") >= 50:
+            return None
+    except Exception:
+        pass
+    return colours
+
+
+def _label(shape, text):
+    if shape.Name:
+        return '"%s"' % short(shape.Name, 40)
+    kind = _shape_type(shape)
+    if kind == _TITLE:
+        return "the title"
+    if kind in _BODY_TYPES:
+        return "the body"
+    return 'the text "%s"' % short(text.replace("\n", " "), 30)
+
+
+def _page_items(page, master):
+    items = []
+    for index in range(page.getCount()):
+        shape = page.getByIndex(index)
+        kind = _shape_type(shape)
+        if (kind in _IGNORED or kind in _EXTRA_KINDS or kind == _NOTES or _is_table(shape)
+                or _is_group(shape) or (master and _is_placeholder(shape))):
+            continue
+        try:
+            text = shape.getString().strip() if shape.supportsService("com.sun.star.drawing.Text") else ""
+            box, bound = _box_of(shape), _bound_of(shape)
+        except Exception:
+            continue
+        fill = None if kind.endswith("LineShape") else _fill_colours(shape)
+        items.append({"shape": shape, "kind": kind, "text": text, "box": box, "bound": bound, "fill": fill,
+                      "label": _label(shape, text) if text else "",
+                      "text_only": bool(text) and (_is_placeholder(shape) or kind.endswith("TextShape")
+                                                   or fill is None)})
+    return items
+
+
+def _page_problems(where, page, master, background):
+    """(key, description) pairs for one slide or master slide."""
+    found = []
+    tolerance = (page.Width + page.Height) // 200  # about 1% of the slide
+    slide = (0, 0, page.Width, page.Height)
+    items = _page_items(page, master)
+    for index, item in enumerate(items):
+        if not item["text"]:
+            continue
+        key = (item["label"], item["text"][:40])
+        sides = design.spill(item["bound"], item["box"], tolerance)
+        if sides:
+            old = item["kind"].endswith(("RectangleShape", "EllipseShape"))
+            hint = ("It was drawn by an earlier version, so its text can't wrap: delete it and add it "
+                    "again with add_shape." if old and ("left" in sides or "right" in sides) else
+                    "Make the shape bigger, shorten the text or use a smaller text size.")
+            found.append((("overflow",) + key, "%s: the text in %s does not fit inside it (it spills out "
+                          "at the %s). %s" % (where, item["label"], " and ".join(sides), hint)))
+        off = design.spill(item["bound"], slide, tolerance)
+        if off:
+            found.append((("off",) + key, "%s: %s runs off the %s edge%s of the slide. Move it, make it "
+                          "smaller or shorten the text." % (where, item["label"], " and ".join(off),
+                                                             "s" if len(off) > 1 else "")))
+        if item["text_only"]:
+            for other in items[index + 1:]:
+                if other["text_only"]:
+                    shared = design.overlap_area(item["bound"], other["bound"])
+                    if shared > 0.05 * min(design.area(item["bound"]), design.area(other["bound"])):
+                        found.append((("overlap",) + key + (other["label"],),
+                                      "%s: the text of %s and the text of %s overlap. Move one of them or "
+                                      "make them smaller." % (where, item["label"], other["label"])))
+                elif other["fill"] is not None:
+                    shared = design.overlap_area(item["bound"], other["box"])
+                    if shared > 0.05 * design.area(item["bound"]):
+                        name = '"%s"' % short(other["shape"].Name, 40) if other["shape"].Name else "a shape"
+                        found.append((("covered",) + key + (name,),
+                                      '%s: %s is in front of the text of %s and hides part of it. Move it, '
+                                      'or delete it and add it again with layer "back".'
+                                      % (where, name, item["label"])))
+        try:
+            colour = item["shape"].getPropertyValue("CharColor")
+        except Exception:
+            colour = None
+        if colour is None or colour < 0:
+            continue  # automatic colour adapts to the background by itself
+        behind = item["fill"]
+        if behind is None:
+            centre = ((item["box"][0] + item["box"][2]) // 2, (item["box"][1] + item["box"][3]) // 2)
+            for other in reversed(items[:index]):
+                if other["fill"] is not None and other["box"][0] <= centre[0] <= other["box"][2] \
+                        and other["box"][1] <= centre[1] <= other["box"][3]:
+                    behind = other["fill"]
+                    break
+        behind = behind or background or [0xFFFFFF]
+        ratio = min(design.contrast(colour, c) for c in behind)
+        if ratio < 3:
+            found.append((("contrast",) + key, "%s: the text of %s (%s) is hard to read on %s (contrast "
+                          "%.1f:1; aim for 3:1 or more). Change the text colour or what is behind it."
+                          % (where, item["label"], design.color_hex(colour),
+                             " to ".join(design.color_hex(c) for c in behind), ratio)))
+    return found
+
+
+def layout_problems(doc):
+    """Problems Claude can't see on the slides and master slides: (key, description) pairs. The key
+    leaves out the slide number, so the panel can tell problems a turn made from ones already there
+    even when slides were added or moved."""
+    found = []
+    pages = _pages(doc)
+    for index in range(pages.getCount()):
+        page = pages.getByIndex(index)
+        background = _fill_colours(page.Background) if page.Background is not None else None
+        if background is None:
+            try:
+                background = _fill_colours(page.MasterPage.Background)
+            except Exception:
+                background = None
+        found += _page_problems("Slide %d" % (index + 1), page, False, background)
+    for master in _masters(doc):
+        found += _page_problems("The master slide", master, True, _fill_colours(master.Background))
+    unique, seen = [], set()
+    for key, text in found:
+        if key not in seen:
+            seen.add(key)
+            unique.append((key, text))
+    return unique
 
 
 def run_tool(doc, name, arguments):
