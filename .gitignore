@@ -1,0 +1,19 @@
+# Only the extension, README.md and LICENSE are public. Everything below stays on this machine.
+
+# Working notes and handover files in the project root (README.md is kept)
+/*.md
+!/README.md
+
+# Development folders
+/scripts/
+/tests/
+/docs/
+/.claude/
+/.unlazy/
+
+# Build output, caches and local files
+dist/
+__pycache__/
+*.pyc
+*.pre-kit
+key.txt
