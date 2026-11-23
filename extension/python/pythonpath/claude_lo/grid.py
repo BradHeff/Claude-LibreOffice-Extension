@@ -79,6 +79,21 @@ def parse_range(text):
     return sheet, min(c1, c2), min(r1, r2), max(c1, c2), max(r1, r2)
 
 
+def split_ranges(text):
+    """"A3:A8, D3:D8" or "A3:A8;D3:D8" -> ["A3:A8", "D3:D8"]. Commas inside a quoted sheet name stay."""
+    parts, current, quoted = [], "", False
+    for char in text:
+        if char == "'":
+            quoted = not quoted
+        if char in ",;" and not quoted:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += char
+    parts.append(current.strip())
+    return [part for part in parts if part]
+
+
 def range_name(c1, r1, c2, r2):
     """Zero-based corners -> "A1:C5", or "B7" for one cell."""
     first = cell_name(c1, r1)
@@ -107,6 +122,58 @@ def risky_formula(text):
     if _EXTERNAL_REFERENCE.search(text):
         return "A reference to another file isn't allowed in formulas Claude writes."
     return ""
+
+
+_SHEET_REFERENCE = re.compile(r"('(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_]*)!(?=\$?[A-Za-z]{1,3}(?:\$?\d|:))")
+_CELL_LIKE = re.compile(r"^[A-Za-z]{1,3}\d+$")
+
+
+def calc_references(formula):
+    """Write references to other sheets the way LibreOffice reads them: Budget!B3 and 'My Sheet'!A1:B2
+    (as in Excel) become $Budget.B3 and $'My Sheet'.A1:B2. Text in double quotes is left alone, and so
+    is A1:B5!B2:C6, where ! is LibreOffice's intersection operator."""
+    if not formula.startswith("=") or "!" not in formula:
+        return formula
+
+    def sheet(match):
+        name = match.group(1)
+        return match.group(0) if _CELL_LIKE.match(name) else "$%s." % name
+
+    parts = formula.split('"')
+    for i in range(0, len(parts), 2):  # the even parts are outside string literals
+        parts[i] = _SHEET_REFERENCE.sub(sheet, parts[i])
+    return '"'.join(parts)
+
+
+_PERCENT = re.compile(r"^[-+]?\d[\d,]*(\.(\d+))?\s*%$")
+_CURRENCY = re.compile(r"^-?\$\s*\d[\d,]*(\.\d+)?$")
+_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
+_TIME = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?\s*([AaPp][Mm])?$")
+_SLASH_DATE = re.compile(r"^\d{1,2}[/.]\d{1,2}[/.]\d{2,4}$")
+
+
+def typed_format(text):
+    """The number format a person would get by typing this into a cell (45% shows as 45%, not 0.45),
+    or None to leave the cell's format alone."""
+    text = text.strip()
+    match = _PERCENT.match(text)
+    if match:
+        return "0.%s%%" % ("0" * len(match.group(2))) if match.group(2) else "0%"
+    if _CURRENCY.match(text):
+        return "$#,##0.00"
+    if _THOUSANDS.match(text):
+        return "#,##0.00" if "." in text else "#,##0"
+    match = _TIME.match(text)
+    if match:
+        seconds = ":SS" if match.group(1) else ""
+        return "H:MM%s AM/PM" % seconds if match.group(2) else "HH:MM%s" % seconds
+    return None
+
+
+def slash_date(text):
+    """True for a date such as 03/04/2026, which reads as 4 March in one country and 3 April in
+    another, so it isn't written."""
+    return bool(_SLASH_DATE.match(text.strip()))
 
 
 def display(formula, value, shown=None):

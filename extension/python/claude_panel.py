@@ -114,6 +114,8 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._undo_doc = None
         self._tracking_before = None
         self._edits = 0
+        self._not_undone = 0  # edits LibreOffice can't undo, such as frozen rows
+        self._undo_steps = 0  # the undo history's length before this turn's first edit
         self._usage = {}
         self._baseline = None  # the layout problems the file had before this turn's first edit
         self._layout_left = 0
@@ -601,6 +603,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._show_all = False
         self._pending = ""
         self._edits = 0
+        self._not_undone = 0
         self._baseline = None
         self._layout_left = 0
         self._cancel.clear()
@@ -691,6 +694,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
                     self._baseline = set(key for key, _ in self.app.layout_problems(doc))
                 except Exception:
                     traceback.print_exc()
+            self._undo_steps = len(doc.getUndoManager().getAllUndoActionTitles())
             common.begin_undo(doc)
             self._undo_doc = doc
             if self.app.SUPPORTS_TRACKING and self.settings.track_changes():
@@ -699,6 +703,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         result, note = outcome if isinstance(outcome, tuple) else (outcome, outcome)
         if not reads:
             self._edits += 1
+            self._not_undone += name in getattr(self.app, "NOT_UNDONE_TOOLS", ())
         self._flush()
         self._turns[-1]["items"].append(("edit", note))
         self._note(note)
@@ -768,7 +773,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._stream_text(delta)
 
     def _finish(self, result, reply, error):
-        tracked = False
+        tracked, steps = False, 1
         if self._undo_doc is not None:
             try:
                 if self._tracking_before is not None:
@@ -776,6 +781,8 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
                     self._tracking_before = None
                     tracked = True
                 common.end_undo(self._undo_doc)
+                # A header or footer Claude adds is a separate undo step in LibreOffice.
+                steps = len(self._undo_doc.getUndoManager().getAllUndoActionTitles()) - self._undo_steps
             except Exception:
                 traceback.print_exc()
             self._undo_doc = None
@@ -787,7 +794,11 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         if self._edits:
             undo_hint = " Claude made %d change%s to the %s; Edit > Undo reverts %s." % (
                 self._edits, "" if self._edits == 1 else "s", self.app.NOUN,
-                "it" if self._edits == 1 else "them in one step")
+                ("it" if self._edits == 1 else "them") + (" in %d steps" % steps if steps > 1 else
+                                                          " in one step" if self._edits > 1 else ""))
+            if self._not_undone:
+                undo_hint += " Undo doesn't reverse %s (see the transcript)." % (
+                    "one of them" if self._not_undone == 1 else "%d of them" % self._not_undone)
             if tracked:
                 undo_hint += " They are tracked changes: accept or reject them in Edit > Track Changes."
         if result is not None and result.stop_reason == "refusal":
