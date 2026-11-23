@@ -4,7 +4,7 @@ A sidebar panel that lets you chat with Claude inside LibreOffice Writer, Calc a
 
 This is an independent project. It is not made, endorsed or supported by Anthropic or by The Document Foundation.
 
-Current version: 0.8.3. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
+Current version: 0.9.0. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
 
 ## Screenshots
 
@@ -76,11 +76,15 @@ A few rules apply to what Claude sees and writes:
 
 Claude sees an outline of each slide: title, body, notes, other text, and the position and size of drawn shapes as percentages of the slide. It can edit text and speaker notes, and add, delete, move and duplicate slides. It can set backgrounds (solid or gradient), fonts and colours for titles and bodies (or the whole deck through the master slide), draw shapes and text boxes, set slide transitions, and add entrance animations (appear, fade, wipe, fly in).
 
+Shapes can be rectangles, rounded rectangles, ellipses, hexagons, octagons, diamonds, triangles, parallelograms, chevrons, arrows, arrow tabs, rings, arcs, lines and text boxes, and each can have a gradient at any angle, a glow, a soft shadow, a rotation and its own font. When you ask for a new deck, a theme or a restyle, Claude is asked to design it: a visual idea that runs through the deck, a palette and type sizes, and a layout that suits each slide (cards, a big number, a process, a comparison) rather than a title and bullets everywhere, with the detail in the speaker notes. Smaller requests change only what you ask for.
+
 Claude cannot see the slides it makes. It works from numbers, so layout quality depends on how well it estimates. It cannot insert images or charts.
 
 To catch the usual mistakes, the panel measures the slides after Claude finishes editing. It looks for text that doesn't fit its shape or runs off the slide, text that overlaps other text or sits behind a shape, and text that is hard to read against its background. Problems that weren't in the file before the turn go back to Claude to fix, up to twice, and the transcript lists each check. Anything still wrong after that is named in the status line for you to look at. The fixes are part of the same undo step as the rest of the turn.
 
-Text wraps inside the rectangles and ellipses Claude draws. Shapes drawn by version 0.8.1 or earlier keep their text on one line; the check flags them, and Claude can redraw them.
+Text wraps inside the shapes Claude draws. Shapes drawn by version 0.8.1 or earlier keep their text on one line; the check flags them, and Claude can redraw them.
+
+Before 0.9.0, a gradient background set by Claude was lost when the deck was saved, and came back as black to white. If a deck saved with an earlier version shows that, ask Claude to set the background again.
 
 Text edits only work in Normal view. In Outline and Slide Sorter view LibreOffice throws away text changes made this way, so the extension refuses them and tells Claude to ask you to switch.
 
@@ -94,7 +98,7 @@ Text edits only work in Normal view. In Outline and Slide Sorter view LibreOffic
 
 ## Models and cost
 
-The default model is Claude Opus 5.5. Settings also offers Sonnet 5.5, Haiku 5.5 and Fable 5.2. Each reply shows how many tokens it used. Long chats cost more because the file text and the conversation are sent again with each message, so use New chat when you change topic. The client asks the API to retry a declined request on a fallback model, except on Haiku, which does not support that.
+The default model is Claude Opus 5.5. Settings also offers Sonnet 5.5, Haiku 5.5 and Fable 5.2. Each reply shows how many tokens it used. Long chats cost more because the file text and the conversation are sent again with each message, so use New chat when you change topic. Designing a whole new deck takes many edits: one six-slide test deck used about 420,000 tokens in and 34,000 out, most of it the conversation sent again with each round of edits. The client asks the API to retry a declined request on a fallback model, except on Haiku, which does not support that.
 
 ## Status and limits
 

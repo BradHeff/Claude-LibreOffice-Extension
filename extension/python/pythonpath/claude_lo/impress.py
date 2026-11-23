@@ -95,19 +95,56 @@ For a deck-wide look, use slide 0: set_background and set_text_style with slide 
 later, and add_shape with slide 0 draws on every slide. Style the master first, \
 then the slides. Keep text readable: light text on a dark background and the \
 reverse, and never place a shape over text unless you send it to the back with \
-layer "back". Keep shapes on the slide (x + width and y + height at most 100) \
-and leave the title and body areas clear. Give every shape a short unique name. \
+layer "back". Keep shapes on the slide (x + width and y + height at most 100), \
+and keep them off the title and body, or move or resize those placeholders \
+(name "title" or "body" in edit_shape). Give every shape a short unique name. \
 Text goes in a shape's own text (one text per shape: use valign for where it \
 sits, and a separate text_box for a heading and a description), so it can't \
-overlap. Name "title" or "body" in edit_shape moves or resizes that placeholder. Slides can \
-have a transition (set_transition) and shapes can have entrance animations \
-(add_animation: appear, fade, wipe, fly_in; clear_animations removes them); \
-the slide view lists both. Animate sparingly: give a slide at most a few \
-steps, and use one consistent transition. Say plainly what you could not do, \
-such as images.
+overlap. Besides rectangles, rounded rectangles and ellipses you can draw \
+hexagons, octagons, diamonds, triangles, parallelograms, chevrons, arrows, \
+arrow tabs, rings and arcs, and any shape can have a gradient at any angle, a \
+glow, a soft shadow and a rotation. Slides can have a transition \
+(set_transition) and shapes can have entrance animations (add_animation: \
+appear, fade, wipe, fly_in; clear_animations removes them); the slide view \
+lists both. Say plainly what you could not do, such as images.
 
-Text wraps inside rectangles and ellipses, and a shape keeps the size you give \
-it, so make each shape big enough for its text. When you finish, the panel \
+Designing a deck. When the person asks for a new deck, a theme or a restyle, \
+design it as a professional presentation designer would; for smaller edits, \
+keep to what they asked. Before the first tool call, decide on:
+- An idea that suits the topic and runs through every slide, such as glowing \
+nodes joined by thin lines for technology, or soft overlapping circles for \
+wellbeing.
+- A palette: a background, one or two surface colours for panels and cards, \
+one or two vivid accents used sparingly, and text colours with strong contrast.
+- A type scale: titles 36 to 54 pt, headings in cards 18 to 24 pt bold, other \
+text 14 to 20 pt, in one or two fonts that are installed (Liberation Sans, \
+Liberation Serif and DejaVu Sans almost always are; LibreOffice swaps a font \
+it can't find for another).
+- A layout for each slide that suits its content, varied through the deck: a \
+striking title slide; section dividers; three or four cards for parallel \
+points; one big number or short statement with a caption; a process or \
+timeline of numbered circles, chevrons or arrow tabs joined by lines; a \
+two-column comparison; a closing slide. Don't make every slide a title and \
+bullets: parallel points become cards, steps become a process, and a key \
+figure becomes a big number. Add the slides you build from shapes with the \
+title_only or blank layout, so no empty body is left behind.
+- Depth and detail: large soft shapes behind the content (layer "back", \
+transparency 60 to 90), thin accent lines and small dots, gradients on panels, \
+a glow on the shapes that should stand out (it suits dark, futuristic looks), \
+and a soft shadow for cards on light backgrounds.
+- Restraint: one focal point per slide, margins of about 5% of the slide, \
+equal gaps, edges that line up, and plenty of empty space. Keep the words \
+short: a card holds a heading and up to about 15 words, and the detail goes \
+in the speaker notes.
+Build the master first (background, text styles and any motif that belongs on \
+every slide), then each slide. Animate with purpose: one transition style \
+through the deck, and each slide built in reading order (the title, then its \
+cards or steps one after another with after_previous) in at most a few clicks.
+
+Text wraps inside drawn shapes, and a shape keeps the size you give it, so \
+make each shape big enough for its text. In a hexagon, diamond, triangle, \
+ring or arc the text area is smaller than the shape, so give those a word or a \
+number, not a sentence. When you finish, the panel \
 measures the slides and sends you any layout problems it finds (text that \
 doesn't fit its shape or runs off the slide, text hidden behind a shape, text \
 that is hard to read) inside <layout_check> tags. That message comes from the \
@@ -126,12 +163,30 @@ _COLOR_OR_NONE = {"type": "string", "description": (
     "(when editing: keep what it has).")}
 _PERCENT = {"type": "number", "description": "A percentage of the slide's width (x, width) or height (y, height)."}
 _PERCENT_KEEP = {"type": "number", "description": "A percentage of the slide, or -1 to keep it as it is."}
+_EFFECTS = {
+    "gradient_angle": {"type": "integer", "description": (
+        "With fill2: the gradient's direction in degrees. 0 runs from fill at the top to fill2 at the "
+        "bottom; 90 runs from the left to the right.")},
+    "glow": {"type": "string", "description": (
+        'A hex colour for a soft glow around the shape, or "none" to remove it. Empty string: none '
+        "(when editing: keep).")},
+    "glow_size": {"type": "number", "description": "How far the glow reaches, in points. 0: 8 points (when editing: keep)."},
+    "shadow": {"type": "string", "enum": ["keep", "on", "off"], "description": (
+        "A soft drop shadow below and to the right.")},
+    "rotation": {"type": "number", "description": (
+        "Degrees clockwise about the shape's centre; x, y, width and height stay those of the "
+        "unturned shape. -1: keep.")},
+    "font": {"type": "string", "description": "A font for the text, such as Liberation Sans. Empty string: keep."},
+}
 # Rectangles and ellipses are custom shapes, as LibreOffice's own toolbar draws them, because their
 # text wraps inside the shape; the older RectangleShape and EllipseShape keep text on one line.
-_SHAPE_SERVICES = {"rectangle": "CustomShape", "rounded_rectangle": "CustomShape",
-                   "ellipse": "CustomShape", "line": "LineShape", "text_box": "TextShape"}
-_GEOMETRY = {"rectangle": "rectangle", "rounded_rectangle": "round-rectangle", "ellipse": "ellipse"}
-_GEOMETRY_WORDS = {"rectangle": "rectangle", "round-rectangle": "rounded rectangle", "ellipse": "ellipse"}
+# The other kinds are LibreOffice's preset shapes, drawn from the Type name alone.
+_GEOMETRY = {"rectangle": "rectangle", "rounded_rectangle": "round-rectangle", "ellipse": "ellipse",
+             "hexagon": "hexagon", "octagon": "octagon", "diamond": "diamond",
+             "triangle": "isosceles-triangle", "parallelogram": "parallelogram", "chevron": "chevron",
+             "arrow_tab": "pentagon-right", "arrow": "right-arrow", "ring": "ring", "arc": "block-arc"}
+_SHAPE_SERVICES = dict({kind: "CustomShape" for kind in _GEOMETRY}, line="LineShape", text_box="TextShape")
+_GEOMETRY_WORDS = {geometry: kind.replace("_", " ") for kind, geometry in _GEOMETRY.items()}
 
 TOOLS = [
     tool("replace_text",
@@ -197,7 +252,8 @@ TOOLS = [
           "bold": ON_OFF, "italic": ON_OFF}, required=['slide', 'role']),
     tool("add_shape",
          "Draw a shape or a text box. Positions and sizes are percentages of the slide, from "
-         "its top-left corner. A line runs from the top-left to the bottom-right corner of "
+         "its top-left corner. A chevron, arrow or arrow_tab points right (turn it with rotation), "
+         "and arc is the top half of a ring. A line runs from the top-left to the bottom-right corner of "
          "its box; give width or height 0 for a straight horizontal or vertical line. With "
          "slide 0 the shape is drawn on the master slide, so it appears on every slide.",
          {"slide": _SLIDE_OR_ALL,
@@ -217,7 +273,8 @@ TOOLS = [
           "bold": ON_OFF,
           "align": {"type": "string", "enum": ["keep", "left", "center", "right"]},
           "valign": {"type": "string", "enum": ["keep", "top", "middle", "bottom"], "description": (
-              "Where the text sits inside the shape, top to bottom.")}}, required=['slide', 'kind', 'name', 'x', 'y', 'width', 'height']),
+              "Where the text sits inside the shape, top to bottom.")}, **_EFFECTS},
+         required=['slide', 'kind', 'name', 'x', 'y', 'width', 'height']),
     tool("edit_shape",
          "Change a shape drawn earlier, or the title or body placeholder (name it \"title\" or "
          "\"body\"). With slide 0 it changes the shape on the master slide. Anything left at "
@@ -235,7 +292,8 @@ TOOLS = [
           "bold": ON_OFF,
           "align": {"type": "string", "enum": ["keep", "left", "center", "right"]},
           "valign": {"type": "string", "enum": ["keep", "top", "middle", "bottom"], "description": (
-              "Where the text sits inside the shape, top to bottom.")}}, required=['slide', 'name']),
+              "Where the text sits inside the shape, top to bottom.")}, **_EFFECTS},
+         required=['slide', 'name']),
     tool("set_transition",
          "Set the transition into a slide (how it appears when the show moves to it), or into "
          "every slide with slide 0. Use effect none to remove it. direction is where the new "
@@ -430,12 +488,26 @@ def _shape_lines(page, placeholders=True):
             continue
         if label in ("title", "body") and word != "placeholder":
             continue
-        position, size = shape.getPosition(), shape.getSize()
+        position, size, angle = shape.getPosition(), shape.getSize(), _angle(shape)
+        x, y = design.unturned_corner(position.X, position.Y, size.Width, size.Height, angle)
         lines.append(design.describe_shape(
-            label, word, design.to_percent(position.X, width), design.to_percent(position.Y, height),
+            label, word, design.to_percent(x, width), design.to_percent(y, height),
             design.to_percent(size.Width, width), design.to_percent(size.Height, height),
-            _fill_text(shape) if word != "placeholder" else None))
+            _fill_text(shape) if word != "placeholder" else None, _effect_notes(shape, angle)))
     return lines
+
+
+def _effect_notes(shape, angle):
+    """["rotated 30°", "glow #8A2BE2", "shadow"]: what the slide view says about a shape's effects."""
+    notes = ["rotated %d°" % design.clockwise(angle)] if angle else []
+    try:
+        if shape.getPropertyValue("GlowEffectRadius") > 0:
+            notes.append("glow " + design.color_hex(shape.getPropertyValue("GlowEffectColor")))
+        if shape.getPropertyValue("Shadow"):
+            notes.append("shadow")
+    except Exception:
+        pass
+    return notes
 
 
 def _theme_line(doc):
@@ -883,13 +955,15 @@ def _slot(page, kinds):
 def _set_body(shape, lines):
     pairs = outline.parse_body(lines)
     shape.setString("\n".join(text for _, text in pairs))
+    if not _shape_type(shape).endswith("OutlinerShape"):
+        return  # giving a subtitle an outline level shows a bullet on it
     enum, index = shape.getText().createEnumeration(), 0
     while enum.hasMoreElements() and index < len(pairs):
         paragraph = enum.nextElement()
         try:
             paragraph.setPropertyValue("NumberingLevel", pairs[index][0])
         except Exception:
-            pass  # a subtitle has no outline levels
+            pass  # a paragraph that takes no outline level
         index += 1
 
 
@@ -1126,7 +1200,8 @@ def _read(obj, names):
 
 
 def _write(obj, values, strict=False):
-    for name in sorted(values, key=lambda n: n != "Size"):  # size first, then position
+    # The turn first, then the size, then the position: a turned shape's position is its turned corner.
+    for name in sorted(values, key=lambda n: (n != "RotateAngle", n != "Size")):
         try:
             if name == "Position":
                 obj.setPosition(values[name])
@@ -1185,7 +1260,7 @@ def _colour(text):
         raise DocumentError(str(problem))
 
 
-_FILL = ("FillStyle", "FillColor", "FillGradient")
+_FILL = ("FillStyle", "FillColor", "FillGradient", "FillGradientName")
 
 
 def _fill_values(color, color2, angle):
@@ -1201,8 +1276,22 @@ def _fill_values(color, color2, angle):
     return {"FillStyle": GRADIENT, "FillGradient": gradient}
 
 
+def _named(doc, values):
+    """A background gradient is saved only by name, so it must be in the document's gradient list;
+    unnamed, it reopens as black to white. Returns the values with the name in place of the gradient."""
+    if "FillGradient" not in values:
+        return values
+    gradient = values["FillGradient"]
+    name = "Claude %s %s %d" % (design.color_hex(gradient.StartColor), design.color_hex(gradient.EndColor),
+                                gradient.Angle // 10)
+    table = doc.createInstance("com.sun.star.drawing.GradientTable")
+    if not table.hasByName(name):
+        table.insertByName(name, gradient)
+    return {"FillStyle": values["FillStyle"], "FillGradientName": name}
+
+
 def set_background(doc, slide, color, color2, angle):
-    values = _fill_values(color, color2, angle)
+    values = _named(doc, _fill_values(color, color2, angle))
     what = "the master slide (every slide)" if slide == 0 else "slide %d" % slide
     if slide == 0:
         backgrounds = [m.Background for m in _masters(doc)]
@@ -1286,7 +1375,14 @@ def set_text_style(doc, slide, role, font, size, color, bold, italic):
 
 _SHAPE_PROPS = ("Position", "Size", "FillStyle", "FillColor", "FillGradient", "FillTransparence",
                 "LineStyle", "LineColor", "LineWidth", "CharColor", "CharHeight", "CharWeight",
-                "ParaAdjust", "TextVerticalAdjust", "CornerRadius")
+                "ParaAdjust", "TextVerticalAdjust", "CornerRadius", "RotateAngle", "CharFontName",
+                "GlowEffectRadius", "GlowEffectColor", "GlowEffectTransparency", "Shadow", "ShadowColor",
+                "ShadowTransparence", "ShadowBlur", "ShadowXDistance", "ShadowYDistance")
+_POINT = 35.28  # slide units (1/100 mm) in a point
+_GLOW = 8  # points, when no glow_size is given
+# A soft black shadow 1.5 mm below and to the right.
+_SHADOW_ON = {"Shadow": True, "ShadowColor": 0x000000, "ShadowTransparence": 60, "ShadowBlur": 300,
+              "ShadowXDistance": 150, "ShadowYDistance": 150}
 _ALIGN = {"left": LEFT, "center": CENTER, "right": RIGHT}
 _VALIGN = {"top": TOP, "middle": MIDDLE, "bottom": BOTTOM}
 
@@ -1312,13 +1408,14 @@ def _is_placeholder(shape):
 
 
 def _style_values(fill, fill2, line_color, line_width, transparency, text_color,
-                  text_size, bold, align, valign="keep"):
+                  text_size, bold, align, valign="keep", font="", glow="", glow_size=0, shadow="keep",
+                  gradient_angle=0):
     """The shape properties for a styling request. Empty or keep values change nothing."""
     values = {}
     if fill == "none":
         values["FillStyle"] = FILL_NONE
     elif fill:
-        values.update(_fill_values(fill, fill2, 0))
+        values.update(_fill_values(fill, fill2, gradient_angle or 0))
     elif fill2:
         raise DocumentError("fill2 needs fill: a gradient runs from fill to fill2.")
     if line_color == "none":
@@ -1327,10 +1424,21 @@ def _style_values(fill, fill2, line_color, line_width, transparency, text_color,
         values["LineStyle"] = LINE_SOLID
         values["LineColor"] = _colour(line_color)
     if line_width and line_width > 0:
-        values["LineWidth"] = int(round(line_width * 35.28))
+        values["LineWidth"] = int(round(line_width * _POINT))
     if transparency is not None and transparency >= 0:
         values["FillTransparence"] = min(int(transparency), 100)
-    values.update(_char_values("", text_size, text_color, bold, "keep"))
+    values.update(_char_values(font, text_size, text_color, bold, "keep"))
+    if glow == "none":
+        values["GlowEffectRadius"] = 0
+    elif glow:
+        values.update(GlowEffectColor=_colour(glow), GlowEffectTransparency=40,
+                      GlowEffectRadius=int(round((glow_size or _GLOW) * _POINT)))
+    elif glow_size and glow_size > 0:
+        values["GlowEffectRadius"] = int(round(glow_size * _POINT))
+    if shadow == "on":
+        values.update(_SHADOW_ON)
+    elif shadow == "off":
+        values["Shadow"] = False
     if align != "keep":
         values["ParaAdjust"] = _ALIGN[align]
     if valign != "keep":
@@ -1366,6 +1474,8 @@ def _build(doc, page, spec):
         if spec["text"]:
             shape.setString(spec["text"])  # before the text styling, which setString would reset
         _write(shape, spec["values"], strict=True)
+        if spec["rotation"]:
+            shape.RotateAngle = spec["rotation"]  # about the centre, so x, y, width and height stay put
         if spec["layer"] == "back":
             shape.ZOrder = 0
     except BaseException:
@@ -1374,8 +1484,17 @@ def _build(doc, page, spec):
     return shape
 
 
+def _effect_note(values, rotation):
+    """", with glow and shadow, turned 30°" for the transcript, or ""."""
+    parts = [label for label, used in (("glow", values.get("GlowEffectRadius")), ("shadow", values.get("Shadow")))
+             if used]
+    note = ", with " + " and ".join(parts) if parts else ""
+    return note + (", turned %d°" % rotation if rotation is not None and rotation >= 0 and rotation % 360 else "")
+
+
 def add_shape(doc, slide, kind, name, x, y, width, height, layer, fill, fill2, line_color,
-              line_width, transparency, text, text_color, text_size, bold, align, valign="keep"):
+              line_width, transparency, text, text_color, text_size, bold, align, valign="keep",
+              font="", glow="", glow_size=0, shadow="keep", rotation=0, gradient_angle=0):
     name = name.strip()
     if not name or name in ("title", "body"):
         raise DocumentError('Give the shape a short unique name (not "title" or "body").')
@@ -1391,10 +1510,10 @@ def add_shape(doc, slide, kind, name, x, y, width, height, layer, fill, fill2, l
     for page in pages:
         pos, dim = _box(page, x, y, width, height, allow_zero=(kind == "line"))
         spec = {"kind": kind, "name": name, "position": pos, "size": dim, "layer": layer,
-                "text": text,
+                "text": text, "rotation": design.rotate_angle(rotation) if rotation and rotation > 0 else 0,
                 "values": _style_values(fill, fill2, line_color, line_width,
                                         transparency, text_color, text_size, bold, align,
-                                        valign)}
+                                        valign, font, glow, glow_size, shadow, gradient_angle)}
         made.append([page, spec, _build(doc, page, spec)])
 
     def undo():
@@ -1411,41 +1530,61 @@ def add_shape(doc, slide, kind, name, x, y, width, height, layer, fill, fill2, l
                 shape.ZOrder = 0
 
     _record(doc, undo, redo)
-    return 'Added %s "%s" to %s at %s, %s, size %s x %s' % (
+    return 'Added %s "%s" to %s at %s, %s, size %s x %s%s' % (
         kind.replace("_", " "), name, where, design.number(x), design.number(y),
-        design.number(width), design.number(height))
+        design.number(width), design.number(height), _effect_note(made[0][1]["values"], rotation))
+
+
+def _angle(shape):
+    try:
+        return shape.getPropertyValue("RotateAngle") or 0
+    except Exception:
+        return 0
 
 
 def edit_shape(doc, slide, name, x, y, width, height, fill, fill2, line_color, line_width,
-               transparency, text_color, text_size, bold, align, valign="keep"):
+               transparency, text_color, text_size, bold, align, valign="keep", font="", glow="",
+               glow_size=0, shadow="keep", rotation=-1, gradient_angle=0):
     targets = []
     for page in _holders(doc, slide):
         targets.append((page, _find_shape(page, name)))
     values = _style_values(fill, fill2, line_color, line_width,
-                           transparency, text_color, text_size, bold, align, valign)
+                           transparency, text_color, text_size, bold, align, valign, font, glow,
+                           glow_size, shadow, gradient_angle)
     geometry = [v for v in (x, y, width, height) if v is not None and v >= 0]
-    if not values and not geometry:
+    turn = rotation is not None and rotation >= 0
+    if not values and not geometry and not turn:
         raise DocumentError("Nothing to change: every value was left at keep.")
 
     def change():
         for page, shape in targets:
-            if geometry:
+            angle = _angle(shape)
+            new_angle = design.rotate_angle(rotation) if turn else angle
+            if geometry or new_angle != angle:
+                # Work on the shape's own, unturned box, then turn it again about its centre.
                 position, size = shape.getPosition(), shape.getSize()
-                nx = x if x >= 0 else design.to_percent(position.X, page.Width)
-                ny = y if y >= 0 else design.to_percent(position.Y, page.Height)
-                nw = width if width >= 0 else design.to_percent(size.Width, page.Width)
-                nh = height if height >= 0 else design.to_percent(size.Height, page.Height)
-                new_position, new_size = _box(page, nx, ny, nw, nh,
-                                              allow_zero=_shape_type(shape).endswith("LineShape"))
-                shape.setSize(new_size)
-                shape.setPosition(new_position)
+                ux, uy = design.unturned_corner(position.X, position.Y, size.Width, size.Height, angle)
+                box = [ux, uy, size.Width, size.Height]
+                for i, (value, total) in enumerate(((x, page.Width), (y, page.Height),
+                                                    (width, page.Width), (height, page.Height))):
+                    if value is not None and value >= 0:
+                        box[i] = design.to_units(value, total)
+                _box(page, *[design.to_percent(v, t) for v, t in zip(box, (page.Width, page.Height) * 2)],
+                     allow_zero=_shape_type(shape).endswith("LineShape"))  # refuses a box off the slide
+                if angle:
+                    shape.RotateAngle = 0
+                shape.setSize(Size(max(box[2], 1), max(box[3], 1)))
+                shape.setPosition(Point(box[0], box[1]))
+                if new_angle:
+                    shape.RotateAngle = new_angle
             _write(shape, values, strict=True)
 
     _changing(doc, [(shape, _SHAPE_PROPS) for _, shape in targets], change)
     changes = [label for label, used in (
         ("position or size", bool(geometry)), ("fill", "FillStyle" in values),
         ("outline", "LineStyle" in values or "LineWidth" in values),
-        ("transparency", "FillTransparence" in values),
+        ("transparency", "FillTransparence" in values), ("rotation", turn),
+        ("glow", "GlowEffectRadius" in values), ("shadow", "Shadow" in values),
         ("text", any(k.startswith("Char") or k in ("ParaAdjust", "TextVerticalAdjust") for k in values))) if used]
     return 'Changed "%s" on %s: %s' % (name, "the master slide" if slide == 0 else "slide %d" % slide,
                                        ", ".join(changes))
@@ -1829,13 +1968,23 @@ def _animation_lines(page):
 # box and with the slide finds text that doesn't fit. Nothing here changes the document.
 
 def _box_of(shape):
-    position, size = shape.getPosition(), shape.getSize()
-    return (position.X, position.Y, position.X + size.Width, position.Y + size.Height)
+    position, size, angle = shape.getPosition(), shape.getSize(), _angle(shape)
+    x, y = design.unturned_corner(position.X, position.Y, size.Width, size.Height, angle)
+    return design.turned_hull(x, y, size.Width, size.Height, angle)
 
 
 def _bound_of(shape):
+    """The BoundRect without a glow or shadow, which LibreOffice counts in it. Text that spills out
+    of a glowing shape by less than the glow's reach is not seen."""
     bound = shape.BoundRect
-    return (bound.X, bound.Y, bound.X + bound.Width, bound.Y + bound.Height)
+    box = (bound.X, bound.Y, bound.X + bound.Width, bound.Y + bound.Height)
+    try:
+        get = shape.getPropertyValue
+        return design.shrink(box, design.effect_margins(
+            get("GlowEffectRadius"), get("Shadow"), get("ShadowBlur"), get("ShadowXDistance"),
+            get("ShadowYDistance")))
+    except Exception:
+        return box
 
 
 def _fill_colours(obj):
@@ -1857,6 +2006,34 @@ def _fill_colours(obj):
     except Exception:
         pass
     return colours
+
+
+def _paint(shape):
+    """What a filled shape lays over what is behind it, from the back: its glow, which LibreOffice
+    draws under the whole shape and shows through a translucent fill, then the fill. A list of
+    (colours, transparency), or None when it has no fill."""
+    try:
+        style = shape.getPropertyValue("FillStyle")
+        if style == SOLID:
+            colours = [shape.getPropertyValue("FillColor")]
+        elif style == GRADIENT:
+            gradient = shape.getPropertyValue("FillGradient")
+            colours = [gradient.StartColor, gradient.EndColor]
+        else:
+            return None
+        transparency = shape.getPropertyValue("FillTransparence")
+    except Exception:
+        return None
+    if transparency >= 100:
+        return None
+    layers = [(colours, transparency)]
+    try:
+        if shape.getPropertyValue("GlowEffectRadius") > 0:
+            layers.insert(0, ([shape.getPropertyValue("GlowEffectColor")],
+                              shape.getPropertyValue("GlowEffectTransparency")))
+    except Exception:
+        pass
+    return layers
 
 
 def _label(shape, text):
@@ -1884,7 +2061,9 @@ def _page_items(page, master):
         except Exception:
             continue
         fill = None if kind.endswith("LineShape") else _fill_colours(shape)
+        paint = None if kind.endswith("LineShape") else _paint(shape)
         items.append({"shape": shape, "kind": kind, "text": text, "box": box, "bound": bound, "fill": fill,
+                      "paint": paint,
                       "label": _label(shape, text) if text else "",
                       "text_only": bool(text) and (_is_placeholder(shape) or kind.endswith("TextShape")
                                                    or fill is None)})
@@ -1936,15 +2115,15 @@ def _page_problems(where, page, master, background):
             colour = None
         if colour is None or colour < 0:
             continue  # automatic colour adapts to the background by itself
-        behind = item["fill"]
-        if behind is None:
-            centre = ((item["box"][0] + item["box"][2]) // 2, (item["box"][1] + item["box"][3]) // 2)
-            for other in reversed(items[:index]):
-                if other["fill"] is not None and other["box"][0] <= centre[0] <= other["box"][2] \
-                        and other["box"][1] <= centre[1] <= other["box"][3]:
-                    behind = other["fill"]
-                    break
-        behind = behind or background or [0xFFFFFF]
+        # What shows behind the text: the slide, then each fill under the text's centre from the back,
+        # then the text's own fill. An opaque fill covers what is under it; a translucent one blends.
+        behind = background or [0xFFFFFF]
+        centre = ((item["box"][0] + item["box"][2]) // 2, (item["box"][1] + item["box"][3]) // 2)
+        layers = [layer for other in items[:index] if other["paint"] is not None
+                  and other["box"][0] <= centre[0] <= other["box"][2]
+                  and other["box"][1] <= centre[1] <= other["box"][3] for layer in other["paint"]]
+        for colours, transparency in layers + (item["paint"] or []):
+            behind = sorted(set(design.blend(c, b, transparency) for c in colours for b in behind))
         ratio = min(design.contrast(colour, c) for c in behind)
         if ratio < 3:
             found.append((("contrast",) + key, "%s: the text of %s (%s) is hard to read on %s (contrast "
@@ -2009,13 +2188,17 @@ def run_tool(doc, name, arguments):
                          a["height"], a.get("layer", "front"), a.get("fill", ""), a.get("fill2", ""),
                          a.get("line_color", ""), a.get("line_width", 0), a.get("transparency", -1),
                          a.get("text", ""), a.get("text_color", ""), a.get("text_size", 0),
-                         a.get("bold", "keep"), a.get("align", "keep"), a.get("valign", "keep"))
+                         a.get("bold", "keep"), a.get("align", "keep"), a.get("valign", "keep"),
+                         a.get("font", ""), a.get("glow", ""), a.get("glow_size", 0),
+                         a.get("shadow", "keep"), a.get("rotation", 0), a.get("gradient_angle", 0))
     if name == "edit_shape":
         return edit_shape(doc, a["slide"], a["name"], a.get("x", -1), a.get("y", -1),
                           a.get("width", -1), a.get("height", -1), a.get("fill", ""),
                           a.get("fill2", ""), a.get("line_color", ""), a.get("line_width", 0),
                           a.get("transparency", -1), a.get("text_color", ""), a.get("text_size", 0),
-                          a.get("bold", "keep"), a.get("align", "keep"), a.get("valign", "keep"))
+                          a.get("bold", "keep"), a.get("align", "keep"), a.get("valign", "keep"),
+                          a.get("font", ""), a.get("glow", ""), a.get("glow_size", 0),
+                          a.get("shadow", "keep"), a.get("rotation", -1), a.get("gradient_angle", 0))
     if name == "delete_shape":
         return delete_shape(doc, a["slide"], a["name"])
     if name == "set_transition":

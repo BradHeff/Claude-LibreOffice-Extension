@@ -1,5 +1,6 @@
 """Pure helpers for styling slides: colours and percentage geometry. No UNO in here."""
 
+import math
 import re
 
 _HEX = re.compile(r"^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$")
@@ -47,11 +48,72 @@ def check_box(x, y, width, height, allow_zero=False):
                          "most 100 (they are percentages of the slide).")
 
 
-def describe_shape(label, kind, x, y, width, height, fill=None):
-    """One line for the slide view, e.g. '"Top bar" (rectangle) at 0, 0, size 100 x 2, fill #00E5FF'."""
+def describe_shape(label, kind, x, y, width, height, fill=None, notes=()):
+    """One line for the slide view, e.g. '"Top bar" (rectangle) at 0, 0, size 100 x 2, fill #00E5FF'.
+    `notes` are extras such as "rotated 30°" or "glow #8A2BE2"."""
     line = '"%s" (%s) at %s, %s, size %s x %s' % (label, kind, number(x), number(y),
                                                   number(width), number(height))
-    return line + (", fill %s" % fill if fill else "")
+    return line + (", fill %s" % fill if fill else "") + "".join(", " + note for note in notes)
+
+
+def rotate_angle(degrees):
+    """Degrees clockwise -> LibreOffice's RotateAngle (hundredths of a degree, anticlockwise)."""
+    return int(round((-degrees % 360) * 100)) % 36000
+
+
+def clockwise(angle):
+    """LibreOffice's RotateAngle -> whole degrees clockwise, 0 to 359."""
+    return int(round(-angle / 100.0)) % 360
+
+
+def _turn(dx, dy, angle):
+    """Turn an offset (y down, as on the slide) anticlockwise by RotateAngle `angle`."""
+    a = math.radians(angle / 100.0)
+    return dx * math.cos(a) + dy * math.sin(a), -dx * math.sin(a) + dy * math.cos(a)
+
+
+def turned_corner(x, y, width, height, angle):
+    """Where LibreOffice puts the position of a box at x, y turned by `angle` about its centre: the
+    turned top-left corner. Slide units, not percentages (a turn isn't the same in both)."""
+    if not angle:
+        return x, y
+    dx, dy = _turn(-width / 2.0, -height / 2.0, angle)
+    return int(round(x + width / 2.0 + dx)), int(round(y + height / 2.0 + dy))
+
+
+def unturned_corner(x, y, width, height, angle):
+    """The top-left corner of a turned shape's own box, from the position LibreOffice reports."""
+    if not angle:
+        return x, y
+    dx, dy = _turn(-width / 2.0, -height / 2.0, angle)
+    return int(round(x - dx - width / 2.0)), int(round(y - dy - height / 2.0))
+
+
+def turned_hull(x, y, width, height, angle):
+    """(left, top, right, bottom) of the box at x, y turned by `angle` about its centre."""
+    if not angle:
+        return (x, y, x + width, y + height)
+    a = math.radians(angle / 100.0)
+    half_w = (abs(width * math.cos(a)) + abs(height * math.sin(a))) / 2.0
+    half_h = (abs(width * math.sin(a)) + abs(height * math.cos(a))) / 2.0
+    cx, cy = x + width / 2.0, y + height / 2.0
+    return (int(round(cx - half_w)), int(round(cy - half_h)), int(round(cx + half_w)),
+            int(round(cy + half_h)))
+
+
+def effect_margins(glow, shadow, blur, dx, dy):
+    """How far a glow and a shadow reach past a shape on each side (left, top, right, bottom), as
+    LibreOffice adds them to its BoundRect."""
+    sides = [glow] * 4
+    if shadow:
+        for i, reach in enumerate((blur - dx, blur - dy, blur + dx, blur + dy)):
+            sides[i] = max(sides[i], reach)
+    return tuple(max(0, side) for side in sides)
+
+
+def shrink(box, margins):
+    """Box (left, top, right, bottom) made smaller by margins (left, top, right, bottom)."""
+    return (box[0] + margins[0], box[1] + margins[1], box[2] - margins[2], box[3] - margins[3])
 
 
 def spill(inner, outer, tolerance):
@@ -83,6 +145,13 @@ def _luminance(color):
         return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
     return (0.2126 * channel((color >> 16) & 255) + 0.7152 * channel((color >> 8) & 255)
             + 0.0722 * channel(color & 255))
+
+
+def blend(top, bottom, transparency):
+    """The colour a fill `transparency` per cent see-through shows over `bottom`."""
+    t = min(max(transparency, 0), 100) / 100.0
+    return sum(int(round(((top >> shift) & 255) * (1 - t) + ((bottom >> shift) & 255) * t)) << shift
+               for shift in (16, 8, 0))
 
 
 def contrast(a, b):
