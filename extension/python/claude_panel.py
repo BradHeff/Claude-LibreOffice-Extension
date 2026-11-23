@@ -4,9 +4,11 @@ Threading: the API request runs on a worker thread. Everything that touches
 the document or a control runs on LibreOffice's main thread, reached through
 `_on_main`.
 
-The transcript is a rich text control. It can't be scrolled from code, so the
-panel shows the current exchange from the top and only ever adds text at the
-end while a reply streams in; "Show earlier" switches to the full history.
+The transcript is a rich text control, which has no call to scroll it. To keep
+the newest text in view, the panel pages the control's own scroll bar down after
+drawing, through the accessibility interface (setting the bar's value moves only
+the thumb, and selecting all shows a highlight). "Show earlier" switches to the
+full history.
 """
 
 import threading
@@ -17,6 +19,8 @@ import uno
 import unohelper
 from com.sun.star.awt import (XActionListener, XCallback, XKeyListener, XMouseListener,
                               XWindowListener)
+from com.sun.star.accessibility.AccessibleRole import SCROLL_BAR
+from com.sun.star.accessibility.AccessibleStateType import VERTICAL
 from com.sun.star.awt.FontSlant import ITALIC as SLANT_ITALIC, NONE as SLANT_NONE
 from com.sun.star.lang import XComponent, XServiceInfo
 from com.sun.star.ui import XSidebarPanel, XToolPanel, XUIElement, XUIElementFactory
@@ -119,6 +123,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         self._show_all = False
         self._phase = "waiting"
         self._started = 0.0
+        self._bar = None  # the transcript's scroll bar, found when first needed
         # Streaming state for the transcript.
         self._parser = render.LineParser()
         self._partial = ""
@@ -451,6 +456,36 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
         else:
             self._paragraph(paragraph["runs"], top=top)
 
+    def _show_end(self):
+        """Bring the end of the transcript into view (see the module docstring)."""
+        try:
+            if self._scroll_bar() is None:
+                return  # no scroll bar to page: the view stays where it is
+            bar, page_down = self._bar
+            for _ in range(500):
+                before = bar.getCurrentValue()
+                bar.doAccessibleAction(page_down)
+                if bar.getCurrentValue() == before:
+                    break
+        except Exception:
+            traceback.print_exc()
+
+    def _scroll_bar(self):
+        """(the transcript's vertical scroll bar, its page-down action), found once through the
+        accessibility interface. The action names are fixed, not translated."""
+        if self._bar is None:
+            pending = [self.transcript.getAccessibleContext()]
+            while pending:
+                context = pending.pop()
+                if context.getAccessibleRole() == SCROLL_BAR and context.getAccessibleStateSet() & VERTICAL:
+                    actions = [context.getAccessibleActionDescription(i)
+                               for i in range(context.getAccessibleActionCount())]
+                    self._bar = (context, actions.index("incrementBlock"))
+                    break
+                pending += [context.getAccessibleChild(i).getAccessibleContext()
+                            for i in range(context.getAccessibleChildCount())]
+        return self._bar
+
     def _drop_provisional(self):
         """Remove the unfinished last line, so it can be drawn again with more text."""
         if not self._has_provisional:
@@ -480,6 +515,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
             self._paragraph([(shown, render.PLAIN)], top=160 if self._parser.after_blank else 0)
             self._provisional_length = outline.utf16_len(shown)
             self._has_provisional = True
+        self._show_end()
 
     def _note(self, text, error=False):
         self._stream_text("", final=True)
@@ -487,6 +523,7 @@ class ClaudePanel(unohelper.Base, XUIElement, XToolPanel, XSidebarPanel, XCompon
                         colour=self.colours["error" if error else "muted"],
                         size=-1.0, top=40, bottom=40, left=450, hanging=450)
         self._parser.after_blank = True
+        self._show_end()
 
     def _draw_turn_heading(self, turn, first):
         note = "  ·  with %s" % turn["note"] if turn["note"] else ""

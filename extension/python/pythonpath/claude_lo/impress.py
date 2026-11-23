@@ -1780,6 +1780,10 @@ def _tidy(page):
     root.Duration = uno.Enum("com.sun.star.animations.Timing", "INDEFINITE")
     root.Restart = 3  # NEVER
     main = _main_sequence(page)
+    if main is not None and main.Restart == 1:
+        # 0.7.0 to 0.9.0 made the main sequence restart always (1), so each click replayed the slide's
+        # effects and the show never moved on (reproduced in a real slide show).
+        main.Restart = 0
     for click in _children(main) if main is not None else []:
         click.Fill = 3  # HOLD
         if getattr(click.Begin, "value", None) == "INDEFINITE":
@@ -1792,8 +1796,7 @@ def _ensure_main(page):
     """The slide's main sequence, made if the slide has none."""
     main = _main_sequence(page)
     if main is None:
-        main = _new("SequenceTimeContainer", Duration=uno.Enum("com.sun.star.animations.Timing", "INDEFINITE"),
-                    Restart=1)
+        main = _new("SequenceTimeContainer", Duration=uno.Enum("com.sun.star.animations.Timing", "INDEFINITE"))
         main.UserData = _user_data(**{"node-type": 4})
         page.getAnimationNode().appendChild(main)
     _tidy(page)

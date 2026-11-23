@@ -89,7 +89,10 @@ notice something else that the change makes inconsistent, mention it and let \
 them decide.
 
 The tools locate text by exact match, so copy the text to find exactly as it \
-appears in the document, and include enough of it to match once. When a tool \
+appears in the document, and include enough of it to match once. If the document is \
+empty, or the new text belongs at the end, give insert_paragraph or insert_table an \
+empty anchor: it adds at the end of the document, so write what was asked for straight \
+into an empty document, then style it. When a tool \
 reports an error, read it, adjust and try again. After editing, say briefly \
 what you changed.
 
@@ -122,6 +125,9 @@ otherwise.
 
 _ANCHOR = {"type": "string", "description": (
     "Exact text from the document that appears once, within a single paragraph or table cell.")}
+_INSERT_ANCHOR = {"type": "string", "description": (
+    "Exact text from the document that appears once, within a single paragraph or table cell. "
+    "Empty string: the end of the document, which is how to write into an empty document.")}
 
 TOOLS = [
     _tool("replace_text",
@@ -135,7 +141,7 @@ TOOLS = [
     _tool("insert_paragraph",
           "Insert one or more new paragraphs before or after the paragraph that contains the "
           "anchor text. Call it once per style: a heading and its body text are two calls.",
-          {"anchor": _ANCHOR, "position": _POSITION,
+          {"anchor": _INSERT_ANCHOR, "position": _POSITION,
            "text": {"type": "string", "description": (
                "The new text. Each line becomes its own paragraph.")},
            "style_like": {"type": "string", "description": (
@@ -144,7 +150,7 @@ TOOLS = [
                "Empty string: use the anchor paragraph's style.")}}),
     _tool("insert_table",
           "Insert a new table after the paragraph that contains the anchor text.",
-          {"anchor": _ANCHOR,
+          {"anchor": _INSERT_ANCHOR,
            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}},
                     "description": (
                         "The table's rows, top to bottom, each a list of cell texts. The first "
@@ -403,10 +409,37 @@ def _paragraph_cursor(doc, anchor):
     return found.getText().createTextCursorByRange(found)
 
 
+def _document_end(doc):
+    """A cursor at the end of the document, after a new paragraph break unless the last paragraph
+    is empty (as in an empty document), so new text never starts with a blank paragraph. Returns
+    (cursor, whether a paragraph was added)."""
+    cursor = doc.getText().createTextCursor()
+    cursor.gotoEnd(False)
+    last = doc.getText().createTextCursorByRange(cursor)
+    last.gotoStartOfParagraph(True)
+    if not last.getString():
+        return cursor, False
+    cursor.getText().insertControlCharacter(cursor, PARAGRAPH_BREAK, False)
+    return cursor, True
+
+
+def _follow_style(doc, name):
+    """The style a paragraph style says should follow it (Text Body after a heading), or None."""
+    try:
+        follow = doc.getStyleFamilies().getByName("ParagraphStyles").getByName(name).FollowStyle
+        return follow if follow != name else None
+    except Exception:
+        return None
+
+
 def insert_paragraph(doc, anchor, text, position="after", style_like=""):
+    style = _paragraph_cursor(doc, style_like).ParaStyleName if style_like else None
+    if not anchor:
+        cursor, added = _document_end(doc)
+        _insert(cursor, text, style or (_follow_style(doc, cursor.ParaStyleName) if added else None))
+        return 'Inserted "%s" at the end of the document' % _short(text.split("\n")[0])
     cursor = _paragraph_cursor(doc, anchor)
     target = cursor.getText()
-    style = _paragraph_cursor(doc, style_like).ParaStyleName if style_like else None
     if position == "before":
         cursor.gotoStartOfParagraph(False)
         target.insertControlCharacter(cursor, PARAGRAPH_BREAK, False)
@@ -414,13 +447,7 @@ def insert_paragraph(doc, anchor, text, position="after", style_like=""):
     else:
         if not style:
             # After a heading, use the style the heading says should follow it.
-            try:
-                styles = doc.getStyleFamilies().getByName("ParagraphStyles")
-                follow = styles.getByName(cursor.ParaStyleName).FollowStyle
-                if follow != cursor.ParaStyleName:
-                    style = follow
-            except Exception:
-                pass
+            style = _follow_style(doc, cursor.ParaStyleName)
         cursor.gotoEndOfParagraph(False)
         target.insertControlCharacter(cursor, PARAGRAPH_BREAK, False)
     _insert(cursor, text, style)
@@ -430,6 +457,14 @@ def insert_paragraph(doc, anchor, text, position="after", style_like=""):
 def insert_table(doc, anchor, rows):
     if not rows or not rows[0] or any(len(row) != len(rows[0]) for row in rows):
         raise DocumentError("Give at least one row, and the same number of cells in every row.")
+    if not anchor:
+        # The table goes in above the empty last paragraph, which stays as the document's end.
+        cursor = _document_end(doc)[0]
+        table = doc.createInstance("com.sun.star.text.TextTable")
+        table.initialize(len(rows), len(rows[0]))
+        cursor.getText().insertTextContent(cursor, table, False)
+        _fill_table(table, rows)
+        return "Inserted a table with %d rows at the end of the document" % len(rows)
     cursor = _paragraph_cursor(doc, anchor)
     if cursor.TextTable is not None:
         raise DocumentError("The anchor is inside a table. Choose a paragraph outside it.")
@@ -448,10 +483,14 @@ def insert_table(doc, anchor, rows):
             target.removeTextContent(cursor.createEnumeration().nextElement())
         except Exception:
             pass
+    _fill_table(table, rows)
+    return "Inserted a table with %d rows after \"%s\"" % (len(rows), _short(anchor))
+
+
+def _fill_table(table, rows):
     for r, row in enumerate(rows):
         for c, value in enumerate(row):
             table.getCellByPosition(c, r).setString(value)
-    return "Inserted a table with %d rows after \"%s\"" % (len(rows), _short(anchor))
 
 
 def delete_paragraph(doc, anchor):

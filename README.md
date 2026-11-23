@@ -4,7 +4,7 @@ A sidebar panel that lets you chat with Claude inside LibreOffice Writer, Calc a
 
 This is an independent project. It is not made, endorsed or supported by Anthropic or by The Document Foundation.
 
-Current version: 0.9.0. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
+Current version: 0.9.1. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
 
 ## Screenshots
 
@@ -58,7 +58,7 @@ Writer has two extra buttons, Insert at cursor and Replace selection, which plac
 
 ### Writer
 
-Claude can replace text, insert paragraphs and tables, delete paragraphs, add and delete table rows, and add comments. It can also style: character formatting (font, size, colour, highlight), paragraph formatting (style, alignment, spacing, indent, background), whole-document changes to a paragraph style such as Heading 1, and table styling (header colours, banded rows, borders). The document view starts with a line listing the styles in use, so Claude can match the look you already have.
+Claude can replace text, insert paragraphs and tables, delete paragraphs, add and delete table rows, and add comments. It can also style: character formatting (font, size, colour, highlight), paragraph formatting (style, alignment, spacing, indent, background), whole-document changes to a paragraph style such as Heading 1, and table styling (header colours, banded rows, borders). The document view starts with a line listing the styles in use, so Claude can match the look you already have. In an empty document Claude writes straight into it, then styles what it wrote.
 
 ### Calc
 
@@ -86,6 +86,8 @@ Text wraps inside the shapes Claude draws. Shapes drawn by version 0.8.1 or earl
 
 Before 0.9.0, a gradient background set by Claude was lost when the deck was saved, and came back as black to white. If a deck saved with an earlier version shows that, ask Claude to set the background again.
 
+Before 0.9.1, a slide with animations could trap the slide show: each click replayed the slide's effects and the show never moved on. If a deck made with an earlier version does that, ask Claude to add the animations again; adding one to a slide repairs that slide.
+
 Text edits only work in Normal view. In Outline and Slide Sorter view LibreOffice throws away text changes made this way, so the extension refuses them and tells Claude to ask you to switch.
 
 ## Privacy and security
@@ -103,7 +105,7 @@ The default model is Claude Opus 5.5. Settings also offers Sonnet 5.5, Haiku 5.5
 ## Status and limits
 
 - Tested on Linux (Fedora) with LibreOffice 26.2. Windows and macOS have not been tested.
-- The slide show animations were built to match the timing data LibreOffice itself writes, after an early version looped on the next slide. That fix has not been confirmed in a live slide show.
+- Slide shows with Claude's transitions and animations are tested by playing them in LibreOffice on a virtual screen and clicking through to the end, on Linux only.
 - Anything you type while Claude is editing becomes part of Claude's undo step, so wait until it finishes.
 - With tracked changes on, deleted text still shows in the document text that Claude reads on the next turn.
 - Not supported: Calc frozen panes, pivot tables and tracked changes; Writer page layout, headers and images; Impress images.
