@@ -4,7 +4,7 @@ A sidebar panel that lets you chat with Claude inside LibreOffice Writer, Calc a
 
 This is an independent project. It is not made, endorsed or supported by Anthropic or by The Document Foundation.
 
-Current version: 0.8.2. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
+Current version: 0.8.3. It is early software that has had one person using it, so expect rough edges (see [Status and limits](#status-and-limits)).
 
 ## Screenshots
 
@@ -100,7 +100,6 @@ The default model is Claude Opus 5.5. Settings also offers Sonnet 5.5, Haiku 5.5
 
 - Tested on Linux (Fedora) with LibreOffice 26.2. Windows and macOS have not been tested.
 - The slide show animations were built to match the timing data LibreOffice itself writes, after an early version looped on the next slide. That fix has not been confirmed in a live slide show.
-- LibreOffice can crash when you close a presentation that Claude drew shapes in and then open another document in the same session. The cause is not found yet. Until it is, save your other open documents before closing such a presentation, or restart LibreOffice after closing it.
 - Anything you type while Claude is editing becomes part of Claude's undo step, so wait until it finishes.
 - With tracked changes on, deleted text still shows in the document text that Claude reads on the next turn.
 - Not supported: Calc frozen panes, pivot tables and tracked changes; Writer page layout, headers and images; Impress images.

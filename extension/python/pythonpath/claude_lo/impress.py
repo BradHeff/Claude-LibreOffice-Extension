@@ -14,6 +14,7 @@ from com.sun.star.drawing.TextVerticalAdjust import BOTTOM, TOP, CENTER as MIDDL
 from com.sun.star.drawing.LineStyle import NONE as LINE_NONE, SOLID as LINE_SOLID
 from com.sun.star.style.ParagraphAdjust import CENTER, LEFT, RIGHT
 from com.sun.star.text.ControlCharacter import PARAGRAPH_BREAK
+from com.sun.star.util import XCloseListener
 
 from claude_lo import chat, design, outline
 from claude_lo.common import DocumentError, ON_OFF, begin_undo, end_undo, short, tool  # noqa: F401
@@ -619,6 +620,52 @@ class _TextUndo(unohelper.Base, XUndoAction):
         except Exception:
             traceback.print_exc()
 
+    def release(self):
+        self.text = self.before = self.after = None
+
+
+class _Releaser(unohelper.Base, XCloseListener):
+    """Lets go of the shapes, pages and texts one document's undo actions hold when it closes.
+
+    When LibreOffice drops a Python undo action, a background thread frees it later, which can be
+    after the document is gone. Freeing a shape then crashes LibreOffice 26.2, so the references
+    are dropped here instead, while the document still exists."""
+
+    def __init__(self, doc):
+        self.doc, self.actions = doc, []
+
+    def queryClosing(self, event, ownership):
+        pass
+
+    def notifyClosing(self, event):
+        self.release()
+
+    def disposing(self, event):
+        self.release()
+
+    def release(self):
+        actions, self.actions, self.doc = self.actions, [], None
+        for action in actions:
+            action.release()
+        if self in _RELEASERS:
+            _RELEASERS.remove(self)
+
+
+_RELEASERS = []
+
+
+def _keep(doc, action):
+    """Add an undo action to the document, to be released when the document closes."""
+    doc.getUndoManager().addUndoAction(action)
+    for releaser in _RELEASERS:
+        if releaser.doc == doc:
+            break
+    else:
+        releaser = _Releaser(doc)
+        doc.addCloseListener(releaser)
+        _RELEASERS.append(releaser)
+    releaser.actions.append(action)
+
 
 def _tracked(doc, texts, change):
     """Run change() and add undo actions for the XText objects it changed."""
@@ -636,9 +683,8 @@ def _tracked(doc, texts, change):
             except Exception:
                 traceback.print_exc()
         raise
-    manager = doc.getUndoManager()
     for key, text in unique.items():
-        manager.addUndoAction(_TextUndo(text, before[key]))
+        _keep(doc, _TextUndo(text, before[key]))
     return result
 
 
@@ -1055,9 +1101,16 @@ class _Action(unohelper.Base, XUndoAction):
         except Exception:
             traceback.print_exc()
 
+    def release(self):
+        self._undo = self._redo = _nothing
+
+
+def _nothing():
+    pass
+
 
 def _record(doc, undo, redo):
-    doc.getUndoManager().addUndoAction(_Action(undo, redo))
+    _keep(doc, _Action(undo, redo))
 
 
 def _read(obj, names):
