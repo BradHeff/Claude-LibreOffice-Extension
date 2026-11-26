@@ -1,3 +1,5 @@
+<p align="center"><img src="logo/logo.png" width="128" alt="Claude for LibreOffice logo: a document with a chat bubble"></p>
+
 # Claude for LibreOffice (unofficial)
 
 A sidebar panel that lets you chat with Claude inside LibreOffice Writer, Calc and Impress. Claude can read the part of your file you choose to send, answer questions about it, and make edits when you ask. It works much like the Claude add-in for Word, but for LibreOffice.
